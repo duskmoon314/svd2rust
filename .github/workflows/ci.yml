@@ -1,6 +1,6 @@
 on:
   push:
-    branches: [ staging, trying, master ]
+    branches: [staging, trying, master]
   pull_request:
 
 name: Continuous integration
@@ -19,7 +19,12 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        TARGET: [x86_64-unknown-linux-gnu, x86_64-apple-darwin, x86_64-pc-windows-msvc]
+        TARGET:
+          [
+            x86_64-unknown-linux-gnu,
+            x86_64-apple-darwin,
+            x86_64-pc-windows-msvc,
+          ]
 
     steps:
       - uses: actions/checkout@v3
@@ -75,7 +80,22 @@ jobs:
         rust: [stable]
 
         # All vendor files we want to test on stable
-        vendor: [Atmel, Freescale, Fujitsu, Holtek, Microchip, Nordic, Nuvoton, NXP, RISC-V, SiliconLabs, Spansion, STMicro, Toshiba]
+        vendor:
+          [
+            Atmel,
+            Freescale,
+            Fujitsu,
+            Holtek,
+            Microchip,
+            Nordic,
+            Nuvoton,
+            NXP,
+            RISC-V,
+            SiliconLabs,
+            Spansion,
+            STMicro,
+            Toshiba,
+          ]
 
         # Options are all, none, strict and const
         options: [all, none]
@@ -196,3 +216,59 @@ jobs:
         with:
           command: fmt
           args: --all -- --check
+
+  prerelease-build:
+    name: Prerelease build
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            suffix: ""
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            suffix: ""
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            suffix: ""
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            suffix: ".exe"
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+          target: ${{ matrix.target }}
+          override: true
+      - uses: actions-rs/cargo@v1
+        with:
+          cross: true
+          command: build
+          args: --target ${{ matrix.target }} --release
+      - uses: actions/upload-artifact@v3
+        with:
+          name: svd2rust-${{ matrix.target }}
+          path: target/${{ matrix.target }}/release/svd2rust${{ matrix.suffix }}
+
+  prerelease:
+    name: Prerelease
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
+    needs: [prerelease-build]
+    steps:
+      # - uses: actions/checkout@v3
+      - uses: actions/download-artifact@v3
+      - uses: softprops/action-gh-release@v1
+        with:
+          prerelease: true
+          name: "Prerelease nightly"
+          tag_name: "nightly"
+          files: |
+            svd2rust-aarch64-apple-darwin
+            svd2rust-x86_64-unknown-linux-gnu
+            svd2rust-x86_64-apple-darwin
+            svd2rust-x86_64-pc-windows-msvc
